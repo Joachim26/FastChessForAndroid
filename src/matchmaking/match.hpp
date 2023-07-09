@@ -32,8 +32,7 @@ class Match {
     }
 
     /// @brief starts the match
-    void start(const EngineConfiguration& engine1_config,
-               const EngineConfiguration& engine2_config);
+    void start(UciEngine& engine1, UciEngine& engine2);
 
     /// @brief returns the match data, only valid after the match has finished
     [[nodiscard]] MatchData get() const { return data_; }

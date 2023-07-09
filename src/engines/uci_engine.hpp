@@ -9,7 +9,10 @@ namespace fast_chess {
 
 class UciEngine : private Communication::Process {
    public:
-    explicit UciEngine(const EngineConfiguration &config) { loadConfig(config); }
+    explicit UciEngine(const EngineConfiguration &config) {
+        loadConfig(config);
+        startEngine();
+    }
 
     ~UciEngine() override { sendQuit(); }
 

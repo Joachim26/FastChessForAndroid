@@ -1,5 +1,7 @@
 #pragma once
 
+#include <matchmaking/cache.hpp>
+#include <matchmaking/util/file_writer.hpp>
 #include <matchmaking/match.hpp>
 #include <matchmaking/result.hpp>
 #include <matchmaking/util/file_writer.hpp>
@@ -85,6 +87,7 @@ class RoundRobin {
     FileWriter file_writer_;
 
     ThreadPool pool_ = ThreadPool(1);
+    ThreadCache<UciEngine> cache_;
 
     Result result_ = Result();
 
