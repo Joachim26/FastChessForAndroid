@@ -184,6 +184,7 @@ void RoundRobin::playGame(const std::pair<EngineConfiguration, EngineConfigurati
     auto match = Match(tournament_options_, opening);
 
     cache_.save(configs.first.name, configs.first);
+    cache_.save(configs.second.name, configs.second);
 
     try {
         start();
@@ -193,6 +194,7 @@ void RoundRobin::playGame(const std::pair<EngineConfiguration, EngineConfigurati
             match.start(cache_.get(configs.first.name), cache_.get(configs.second.name));
         }
     } catch (const std::exception& e) {
+        std::cout << e.what() << std::endl;
         Logger::error(e.what(), std::this_thread::get_id(), "fast-chess::RoundRobin::playGame");
         return;
     }

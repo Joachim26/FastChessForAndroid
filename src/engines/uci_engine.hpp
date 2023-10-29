@@ -40,6 +40,8 @@ class UciEngine : private Communication::Process {
     /// @brief Creates a new process and starts the engine.
     void startEngine();
 
+    void refreshUci();
+
     /// @brief Waits for the engine to output the last_word or until the threshold_ms is reached.
     /// May throw if the read fails.
     /// @param last_word
