@@ -1,3 +1,8 @@
+# FastChessForAndroid
+This fork just provides Android armv8 builds in the release section:
+https://github.com/Joachim26/FastChessForAndroid/releases/tag/v0.6.3-alpha
+These builds are compiled on Termux with gcc 10.3 or gcc 11.1.
+
 # fast-chess
 
 [![FastChess](https://github.com/Disservin/fast-chess/actions/workflows/fastchess.yml/badge.svg?branch=master)](https://github.com/Disservin/fast-chess/actions/workflows/fastchess.yml)
