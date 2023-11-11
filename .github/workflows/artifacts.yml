@@ -1,8 +1,9 @@
 name: Upload Artifacts
 
 on:
+  workflow_dispatch:
   workflow_call:
-    
+   
 jobs:
   Archive:
     name: ${{ matrix.config.name }}
