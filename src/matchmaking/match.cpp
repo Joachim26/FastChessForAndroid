@@ -41,10 +41,10 @@ void Match::addMoveData(const Participant& player, int64_t measured_time_ms) {
     // Missing elements default to 0
     std::stringstream ss;
 
-    if (score_type == "cp") {
+    if (score_type == ScoreType::CP) {
         ss << (move_data.score >= 0 ? '+' : '-');
         ss << std::fixed << std::setprecision(2) << (float(std::abs(move_data.score)) / 100);
-    } else if (score_type == "mate") {
+    } else if (score_type == ScoreType::MATE) {
         ss << (move_data.score > 0 ? "+M" : "-M") << std::to_string(std::abs(move_data.score));
     } else {
         ss << "ERR";
@@ -57,7 +57,7 @@ void Match::addMoveData(const Participant& player, int64_t measured_time_ms) {
     data_.moves.push_back(move_data);
 }
 
-void Match::prepareOpening() {
+void Match::prepare() {
     board_.set960(tournament_options_.variant == VariantType::FRC);
     board_.setFen(opening_.fen);
 
@@ -74,23 +74,25 @@ void Match::prepareOpening() {
 
     std::transform(opening_.moves.begin(), opening_.moves.end(), std::back_inserter(data_.moves),
                    insert_move);
+
+    draw_tracker_   = DrawTacker(tournament_options_);
+    resign_tracker_ = ResignTracker(tournament_options_);
 }
 
-void Match::start(const EngineConfiguration& engine1_config,
-                  const EngineConfiguration& engine2_config) {
-    prepareOpening();
+void Match::start(UciEngine& engine1, UciEngine& engine2, const std::vector<int>& cpus) {
+    prepare();
 
-    draw_tracker_   = DrawTacker();
-    resign_tracker_ = ResignTracker();
-
-    Participant player_1 = Participant(engine1_config, cpus_);
-    Participant player_2 = Participant(engine2_config, cpus_);
-
-    player_1.engine.startEngine();
-    player_2.engine.startEngine();
+    Participant player_1 = Participant(engine1);
+    Participant player_2 = Participant(engine2);
 
     player_1.info.color = board_.sideToMove();
     player_2.info.color = ~board_.sideToMove();
+
+    player_1.engine.setCpus(cpus);
+    player_2.engine.setCpus(cpus);
+
+    player_1.engine.refreshUci();
+    player_2.engine.refreshUci();
 
     const auto start = clock::now();
 
@@ -186,8 +188,8 @@ bool Match::playMove(Participant& us, Participant& opponent) {
         return false;
     }
 
-    updateDrawTracker(us);
-    updateResignTracker(us);
+    draw_tracker_.update(us.engine.lastScore(), data_.moves.size(), us.engine.lastScoreType());
+    resign_tracker_.update(us.engine.lastScore(), us.engine.lastScoreType());
 
     addMoveData(us, elapsed_millis);
 
@@ -260,35 +262,8 @@ void Match::setLose(Participant& us, Participant& them) noexcept {
     them.info.result = GameResult::WIN;
 }
 
-void Match::updateDrawTracker(const Participant& player) noexcept {
-    const auto score = player.engine.lastScore();
-
-    if (data_.moves.size() >= tournament_options_.draw.move_number  //
-        && std::abs(score) <= tournament_options_.draw.score        //
-        && player.engine.lastScoreType() == "cp"                    //
-    ) {
-        draw_tracker_.draw_moves++;
-    } else {
-        draw_tracker_.draw_moves = 0;
-    }
-}
-
-void Match::updateResignTracker(const Participant& player) noexcept {
-    const auto score = player.engine.lastScore();
-
-    if (std::abs(score) >= tournament_options_.resign.score  //
-        && player.engine.lastScoreType() == "cp"             //
-    ) {
-        resign_tracker_.resign_moves++;
-    } else {
-        resign_tracker_.resign_moves = 0;
-    }
-}
-
 bool Match::adjudicate(Participant& us, Participant& them) noexcept {
-    if (tournament_options_.draw.enabled                                    //
-        && draw_tracker_.draw_moves >= tournament_options_.draw.move_count  //
-    ) {
+    if (tournament_options_.draw.enabled && draw_tracker_.adjudicatable()) {
         setDraw(us, them);
 
         data_.termination = MatchTermination::ADJUDICATION;
@@ -297,9 +272,7 @@ bool Match::adjudicate(Participant& us, Participant& them) noexcept {
         return true;
     }
 
-    if (tournament_options_.resign.enabled &&
-        resign_tracker_.resign_moves >= tournament_options_.resign.move_count  //
-    ) {
+    if (tournament_options_.resign.enabled && resign_tracker_.resignable()) {
         data_.termination = MatchTermination::ADJUDICATION;
         data_.reason      = us.engine.getConfig().name;
 

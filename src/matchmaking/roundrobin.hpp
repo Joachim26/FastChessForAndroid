@@ -1,15 +1,17 @@
 #pragma once
 
+#include <matchmaking/opening_book.h>
+#include <affinity/cores.hpp>
 #include <matchmaking/match.hpp>
 #include <matchmaking/result.hpp>
-#include <util/file_writer.hpp>
-#include <util/threadpool.hpp>
 #include <pgn_reader.hpp>
 #include <sprt.hpp>
 #include <types/stats.hpp>
-#include <affinity/cores.hpp>
-#include <util/rand.hpp>
 #include <types/tournament_options.hpp>
+#include <util/cache.hpp>
+#include <util/file_writer.hpp>
+#include <util/rand.hpp>
+#include <util/threadpool.hpp>
 
 namespace fast_chess {
 
@@ -40,11 +42,6 @@ class RoundRobin {
     }
 
    private:
-    /// @brief load an pgn opening book
-    void setupPgnOpeningBook();
-    /// @brief load an epd opening book
-    void setupEpdOpeningBook();
-
     /// @brief creates the matches
     /// @param engine_configs
     /// @param results
@@ -67,33 +64,14 @@ class RoundRobin {
                   start_callback start, finished_callback finish, const Opening &opening,
                   std::size_t round_id);
 
-    /// @brief create the Stats object from the match data
-    /// @param match_data
-    /// @return
-    [[nodiscard]] static Stats extractStats(const MatchData &match_data);
-
-    /// @brief fetches the next fen from a sequential read opening book or from a randomized
-    /// opening book order
-    /// @return
-    [[nodiscard]] Opening fetchNextOpening();
-
-    /// @brief Fisher-Yates / Knuth shuffle
-    /// @tparam T
-    /// @param vec
-    template <typename T>
-    void shuffle(std::vector<T> &vec) {
-        if (tournament_options_.opening.order == OrderType::RANDOM) {
-            for (std::size_t i = 0; i + 2 <= vec.size(); i++) {
-                std::size_t j = i + (random::mersenne_rand() % (vec.size() - i));
-                std::swap(vec[i], vec[j]);
-            }
-        }
-    }
-
     /// @brief Outputs the current state of the round robin to the console
     std::unique_ptr<IOutput> output_;
 
     cmd::TournamentOptions tournament_options_ = {};
+
+    affinity::CoreHandler cores_;
+
+    CachePool<UciEngine, std::string> engine_cache_ = CachePool<UciEngine, std::string>();
 
     /// @brief the file writer for the pgn file
     FileWriter file_writer_;
@@ -104,10 +82,7 @@ class RoundRobin {
 
     SPRT sprt_ = SPRT();
 
-    affinity::CoreHandler cores_;
-
-    std::vector<std::string> opening_book_epd_;
-    std::vector<Opening> opening_book_pgn_;
+    OpeningBook book_;
 
     /// @brief number of games played
     std::atomic<uint64_t> match_count_ = 0;

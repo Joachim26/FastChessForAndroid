@@ -7,41 +7,47 @@
 
 namespace fast_chess {
 
-EngineConfiguration UciEngine::getConfig() const { return config_; }
-
 bool UciEngine::isResponsive(std::chrono::milliseconds threshold) {
-    if (!isAlive()) return false;
+    if (!alive()) return false;
 
     writeEngine("isready");
     const auto res = readEngine("readyok", threshold);
     return res == Process::Status::OK;
 }
 
-bool UciEngine::sendUciNewGame() {
+bool UciEngine::ucinewgame() {
     writeEngine("ucinewgame");
     return isResponsive(ping_time_);
 }
 
-void UciEngine::sendUci() { writeEngine("uci"); }
+void UciEngine::uci() { writeEngine("uci"); }
 
-bool UciEngine::readUci() { return readEngine("uciok") == Process::Status::OK; }
+bool UciEngine::uciok() { return readEngine("uciok") == Process::Status::OK; }
 
 void UciEngine::loadConfig(const EngineConfiguration &config) { config_ = config; }
 
-void UciEngine::sendQuit() { writeEngine("quit"); }
+void UciEngine::quit() { writeEngine("quit"); }
 
 void UciEngine::sendSetoption(const std::string &name, const std::string &value) {
     writeEngine("setoption name " + name + " value " + value);
 }
 
-void UciEngine::startEngine() {
-    initProcess((config_.dir == "." ? "" : config_.dir) + config_.cmd, config_.args, config_.name,
-                cpus_);
+void UciEngine::start() {
+    Logger::log<Logger::Level::TRACE>("Starting engine", config_.name);
+    init((config_.dir == "." ? "" : config_.dir) + config_.cmd, config_.args, config_.name);
+}
 
-    sendUci();
+void UciEngine::refreshUci() {
+    uci();
 
-    if (!readUci() && !isResponsive(std::chrono::milliseconds(60000))) {
-        throw std::runtime_error("Warning; Something went wrong when pinging the engine.");
+    if (!uciok() && !isResponsive(std::chrono::milliseconds(60000))) {
+        // restart the engine
+        restart();
+        uci();
+
+        if (!uciok() && !isResponsive(std::chrono::milliseconds(60000))) {
+            throw std::runtime_error("Warning; Something went wrong when pinging the engine.");
+        }
     }
 
     for (const auto &option : config_.options) {
@@ -52,7 +58,7 @@ void UciEngine::startEngine() {
         sendSetoption("UCI_Chess960", "true");
     }
 
-    if (!sendUciNewGame()) {
+    if (!ucinewgame()) {
         throw std::runtime_error(config_.name + " failed to start.");
     }
 }
@@ -100,13 +106,21 @@ std::vector<std::string> UciEngine::lastInfo() const {
     return str_utils::splitString(output_[output_.size() - 2], ' ');
 }
 
-std::string UciEngine::lastScoreType() const {
-    return str_utils::findElement<std::string>(lastInfo(), "score").value_or("cp");
+ScoreType UciEngine::lastScoreType() const {
+    auto score = str_utils::findElement<std::string>(lastInfo(), "score").value_or("ERR");
+
+    return score == "ERR" ? ScoreType::ERR : score == "cp" ? ScoreType::CP : ScoreType::MATE;
 }
 
 int UciEngine::lastScore() const {
-    return str_utils::findElement<int>(lastInfo(), lastScoreType()).value_or(0);
-}
+    const auto score = lastScoreType();
 
-const std::vector<std::string> &UciEngine::output() const { return output_; }
+    if (score == ScoreType::ERR) {
+        Logger::log<Logger::Level::WARN>("Warning; Could not extract last uci score.");
+        return 0;
+    }
+
+    return str_utils::findElement<int>(lastInfo(), lastScoreType() == ScoreType::CP ? "cp" : "mate")
+        .value_or(0);
+}
 }  // namespace fast_chess

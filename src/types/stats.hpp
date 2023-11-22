@@ -1,12 +1,23 @@
 #pragma once
 
 #include <helper.hpp>
+#include <types/match_data.hpp>
 
 namespace fast_chess {
 
-struct Stats {
+class Stats {
+   public:
     Stats() = default;
     Stats(int wins, int losses, int draws) : wins(wins), losses(losses), draws(draws) {}
+    Stats(const MatchData &match_data) {
+        if (match_data.players.first.result == chess::GameResult::WIN) {
+            wins++;
+        } else if (match_data.players.first.result == chess::GameResult::LOSE) {
+            losses++;
+        } else {
+            draws++;
+        }
+    }
 
     Stats &operator+=(const Stats &rhs) {
         wins += rhs.wins;

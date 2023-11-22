@@ -19,14 +19,11 @@ TEST_SUITE("Uci Engine Communication Tests") {
 #else
         config.cmd = path + "dummy_engine";
 #endif
-        std::vector<int> cpus = {};
 
-        UciEngine uci_engine = UciEngine(config, cpus);
-
-        uci_engine.startEngine();
-
-        uci_engine.sendUci();
-        auto uci       = uci_engine.readUci();
+        UciEngine uci_engine = UciEngine(config);
+        
+        uci_engine.uci();
+        auto uci       = uci_engine.uciok();
         auto uciOutput = uci_engine.output();
 
         CHECK(uci);
@@ -56,11 +53,7 @@ TEST_SUITE("Uci Engine Communication Tests") {
 #else
         config.cmd = path + "dummy_engine";
 #endif
-        std::vector<int> cpus = {};
-
-        UciEngine uci_engine = UciEngine(config, cpus);
-
-        uci_engine.startEngine();
+        UciEngine uci_engine = UciEngine(config);
 
         uci_engine.writeEngine("uci");
         const auto res = uci_engine.readEngine("uciok");

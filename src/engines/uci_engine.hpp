@@ -12,38 +12,28 @@
 
 namespace fast_chess {
 
+enum class ScoreType { CP, MATE, ERR };
+
 class UciEngine : Process {
    public:
-    explicit UciEngine(const EngineConfiguration &config, const std::vector<int> &cpus)
-        : cpus_(cpus) {
+    explicit UciEngine(const EngineConfiguration &config) {
         loadConfig(config);
+        start();
     }
 
-    ~UciEngine() override { sendQuit(); }
+    ~UciEngine() override { quit(); }
 
-    /// @brief Just writes "uci" to the engine
-    void sendUci();
+    void refreshUci();
 
-    /// @brief Reads until "uciok" is found, uses the default ping_time_ as the timeout thresholdd.
-    /// @return
-    [[nodiscard]] bool readUci();
-
-    /// @brief Sends "ucinewgame" to the engine and waits for a response. Also uses the ping_time_
-    /// as the timeout thresholdd.
-    [[nodiscard]] bool sendUciNewGame();
-
-    /// @brief Sends "quit" to the engine.
-    void sendQuit();
+    void uci();
+    void quit();
+    [[nodiscard]] bool uciok();
+    [[nodiscard]] bool ucinewgame();
 
     /// @brief Sends "isready" to the engine and waits for a response.
     /// @param threshold
     /// @return
     [[nodiscard]] bool isResponsive(std::chrono::milliseconds threshold = ping_time_);
-
-    [[nodiscard]] EngineConfiguration getConfig() const;
-
-    /// @brief Creates a new process and starts the engine.
-    void startEngine();
 
     /// @brief Waits for the engine to output the last_word or until the threshold_ms is reached.
     /// May throw if the read fails.
@@ -57,6 +47,8 @@ class UciEngine : Process {
     /// @param input
     void writeEngine(const std::string &input);
 
+    void setCpus(const std::vector<int> &cpus) { setAffinity(cpus); }
+
     /// @brief Get the bestmove from the last output.
     /// @return
     [[nodiscard]] std::string bestmove() const;
@@ -67,25 +59,27 @@ class UciEngine : Process {
 
     /// @brief Get the last score type from the last output. cp or mate.
     /// @return
-    [[nodiscard]] std::string lastScoreType() const;
+    [[nodiscard]] ScoreType lastScoreType() const;
 
     /// @brief Get the last score from the last output. Becareful, mate scores are not converted. So
     /// the score might 1, while it's actually mate 1. Always check lastScoreType() first.
     /// @return
     [[nodiscard]] int lastScore() const;
 
-    [[nodiscard]] const std::vector<std::string> &output() const;
+    [[nodiscard]] const std::vector<std::string> &output() const noexcept { return output_; }
+    [[nodiscard]] const EngineConfiguration &getConfig() const noexcept { return config_; }
 
     /// @brief TODO: expose this to the user
     static constexpr std::chrono::milliseconds ping_time_ = std::chrono::milliseconds(60000);
 
    private:
+    /// @brief Creates a new process and starts the engine.
+    void start();
+
     void loadConfig(const EngineConfiguration &config);
     void sendSetoption(const std::string &name, const std::string &value);
 
     EngineConfiguration config_;
-
-    const std::vector<int> &cpus_;
 
     std::vector<std::string> output_;
 };

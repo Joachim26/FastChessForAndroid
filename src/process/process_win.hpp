@@ -7,12 +7,12 @@
 #include <cassert>
 #include <chrono>
 #include <cstdint>
+#include <future>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
-#include <future>
 
 #include <windows.h>
 
@@ -28,28 +28,29 @@ class Process : public IProcess {
    public:
     ~Process() override { killProcess(); }
 
-    void initProcess(const std::string &command, const std::string &args,
-                     const std::string &log_name, const std::vector<int> &cpus) override {
+    void init(const std::string &command, const std::string &args,
+              const std::string &log_name) override {
+        command_  = command;
+        args_     = args;
         log_name_ = log_name;
 
         pi_ = PROCESS_INFORMATION();
 
-        is_initalized_  = true;
         STARTUPINFOA si = STARTUPINFOA();
         si.dwFlags      = STARTF_USESTDHANDLES;
 
         SECURITY_ATTRIBUTES sa = SECURITY_ATTRIBUTES();
         sa.bInheritHandle      = TRUE;
 
-        HANDLE childStdOutRd, childStdOutWr;
-        CreatePipe(&childStdOutRd, &childStdOutWr, &sa, 0);
-        SetHandleInformation(childStdOutRd, HANDLE_FLAG_INHERIT, 0);
-        si.hStdOutput = childStdOutWr;
+        HANDLE child_stdout_read, child_stdout_write;
+        CreatePipe(&child_stdout_read, &child_stdout_write, &sa, 0);
+        SetHandleInformation(child_stdout_read, HANDLE_FLAG_INHERIT, 0);
+        si.hStdOutput = child_stdout_write;
 
-        HANDLE childStdInRd, childStdInWr;
-        CreatePipe(&childStdInRd, &childStdInWr, &sa, 0);
-        SetHandleInformation(childStdInWr, HANDLE_FLAG_INHERIT, 0);
-        si.hStdInput = childStdInRd;
+        HANDLE child_stdin_read, child_stdin_write;
+        CreatePipe(&child_stdin_read, &child_stdin_write, &sa, 0);
+        SetHandleInformation(child_stdin_write, HANDLE_FLAG_INHERIT, 0);
+        si.hStdInput = child_stdin_read;
 
         /*
         CREATE_NEW_PROCESS_GROUP flag is important here to disable all CTRL+C signals for the new
@@ -58,25 +59,29 @@ class Process : public IProcess {
         CreateProcessA(nullptr, const_cast<char *>((command + " " + args).c_str()), nullptr,
                        nullptr, TRUE, CREATE_NEW_PROCESS_GROUP, nullptr, nullptr, &si, &pi_);
 
-        CloseHandle(childStdOutWr);
-        CloseHandle(childStdInRd);
+        // not needed
+        CloseHandle(child_stdout_write);
+        CloseHandle(child_stdin_read);
 
-        child_std_out_ = childStdOutRd;
-        child_std_in_  = childStdInWr;
-
-        // set process affinity
-        if (!cpus.empty()) {
-            affinity::set_affinity(cpus, pi_.hProcess);
-        }
+        child_std_out_ = child_stdout_read;
+        child_std_in_  = child_stdin_write;
 
         fast_chess::pid_list.push(pi_.hProcess);
+        is_initalized_ = true;
     }
 
-    [[nodiscard]] bool isAlive() const override {
+    [[nodiscard]] bool alive() const override {
         assert(is_initalized_);
         DWORD exitCode = 0;
         GetExitCodeProcess(pi_.hProcess, &exitCode);
         return exitCode == STILL_ACTIVE;
+    }
+
+    void setAffinity(const std::vector<int> &cpus) override {
+        assert(is_initalized_);
+        if (!cpus.empty()) {
+            affinity::set_affinity(cpus, pi_.hProcess);
+        }
     }
 
     void killProcess() {
@@ -100,6 +105,11 @@ class Process : public IProcess {
         }
 
         is_initalized_ = false;
+    }
+
+    void restart() override {
+        killProcess();
+        init(command_, args_, log_name_);
     }
 
    protected:
@@ -172,7 +182,7 @@ class Process : public IProcess {
         assert(is_initalized_);
         fast_chess::Logger::writeToEngine(input, log_name_);
 
-        if (!isAlive()) {
+        if (!alive()) {
             killProcess();
         }
 
@@ -196,6 +206,8 @@ class Process : public IProcess {
         }
     }
 
+    std::string command_;
+    std::string args_;
     std::string log_name_;
 
     bool is_initalized_ = false;

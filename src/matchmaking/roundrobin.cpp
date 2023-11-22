@@ -6,27 +6,26 @@
 #include <pgn_builder.hpp>
 #include <util/logger.hpp>
 #include <util/rand.hpp>
+#include <util/scope_guard.hpp>
 
 namespace fast_chess {
 
 RoundRobin::RoundRobin(const cmd::TournamentOptions& game_config)
     : output_(getNewOutput(game_config.output)),
       tournament_options_(game_config),
-      cores_(game_config.affinity) {
+      cores_(game_config.affinity),
+      book_(game_config.opening.file, game_config.opening.format, game_config.opening.start) {
     auto filename = (game_config.pgn.file.empty() ? "fast-chess" : game_config.pgn.file);
 
     if (game_config.output == OutputType::FASTCHESS) {
         filename += ".pgn";
     }
 
+    if (tournament_options_.opening.order == OrderType::RANDOM) book_.shuffle();
+
     file_writer_.open(filename);
 
-    setupEpdOpeningBook();
-    setupPgnOpeningBook();
-
-    // Resize the thread pool, but don't go over the number of threads the system has
-    pool_.resize(std::min(static_cast<int>(std::thread::hardware_concurrency()),
-                          tournament_options_.concurrency));
+    pool_.resize(tournament_options_.concurrency);
 
     // Initialize the SPRT test
     sprt_ = SPRT(tournament_options_.sprt.alpha, tournament_options_.sprt.beta,
@@ -34,49 +33,6 @@ RoundRobin::RoundRobin(const cmd::TournamentOptions& game_config)
 
     // Set the seed for the random number generator
     random::mersenne_rand.seed(tournament_options_.seed);
-}
-
-void RoundRobin::setupEpdOpeningBook() {
-    if (tournament_options_.opening.file.empty() ||
-        tournament_options_.opening.format != FormatType::EPD) {
-        return;
-    }
-
-    // Read the opening book from file
-    std::ifstream openingFile;
-    openingFile.open(tournament_options_.opening.file);
-
-    std::string line;
-    while (std::getline(openingFile, line)) {
-        opening_book_epd_.emplace_back(line);
-    }
-
-    openingFile.close();
-
-    if (opening_book_epd_.empty()) {
-        throw std::runtime_error("No openings found in EPD file: " +
-                                 tournament_options_.opening.file);
-    }
-
-    shuffle(opening_book_epd_);
-}
-
-void RoundRobin::setupPgnOpeningBook() {
-    // Read the opening book from file
-    if (tournament_options_.opening.file.empty() ||
-        tournament_options_.opening.format != FormatType::PGN) {
-        return;
-    }
-
-    const PgnReader pgn_reader = PgnReader(tournament_options_.opening.file);
-    opening_book_pgn_          = pgn_reader.getPgns();
-
-    if (opening_book_pgn_.empty()) {
-        throw std::runtime_error("No openings found in PGN file: " +
-                                 tournament_options_.opening.file);
-    }
-
-    shuffle(opening_book_pgn_);
 }
 
 void RoundRobin::start(const std::vector<EngineConfiguration>& engine_configs) {
@@ -96,7 +52,7 @@ void RoundRobin::create(const std::vector<EngineConfiguration>& engine_configs) 
     const auto create_match = [this, &engine_configs](std::size_t i, std::size_t j,
                                                       std::size_t round_id) {
         // both players get the same opening
-        const auto opening = fetchNextOpening();
+        const auto opening = book_.fetch();
         const auto first   = engine_configs[i];
         const auto second  = engine_configs[j];
 
@@ -184,15 +140,18 @@ void RoundRobin::playGame(const std::pair<EngineConfiguration, EngineConfigurati
     const auto max_threads_for_affinity = first_threads == second_threads ? first_threads : 0;
     const auto core                     = cores_.consume(max_threads_for_affinity);
 
-    auto match = Match(tournament_options_, opening, core.cpus);
+    auto engine_one = ScopeGuard(engine_cache_.getEntry(configs.first.name, configs.first));
+    auto engine_two = ScopeGuard(engine_cache_.getEntry(configs.second.name, configs.second));
 
     start();
 
+    auto match = Match(tournament_options_, opening);
+
     try {
-        match.start(configs.first, configs.second);
+        match.start(engine_one.get().get(), engine_two.get().get(), core.cpus);
 
         while (match.get().needs_restart) {
-            match.start(configs.first, configs.second);
+            match.start(engine_one.get().get(), engine_two.get().get(), core.cpus);
         }
 
     } catch (const std::exception& e) {
@@ -208,46 +167,13 @@ void RoundRobin::playGame(const std::pair<EngineConfiguration, EngineConfigurati
     if (atomic::stop) return;
 
     const auto match_data = match.get();
-    const auto result     = extractStats(match_data);
 
     // If the game was stopped, don't write the PGN
     if (match_data.termination != MatchTermination::INTERRUPT) {
         file_writer_.write(PgnBuilder(match_data, tournament_options_, game_id).get());
     }
 
-    finish(result, match_data.reason);
-}
-
-Stats RoundRobin::extractStats(const MatchData& match_data) {
-    Stats stats;
-
-    if (match_data.players.first.result == chess::GameResult::WIN) {
-        stats.wins++;
-    } else if (match_data.players.first.result == chess::GameResult::LOSE) {
-        stats.losses++;
-    } else {
-        stats.draws++;
-    }
-
-    return stats;
-}
-
-Opening RoundRobin::fetchNextOpening() {
-    static uint64_t opening_index = 0;
-
-    const auto idx = tournament_options_.opening.start + opening_index++;
-
-    if (tournament_options_.opening.format == FormatType::PGN) {
-        return opening_book_pgn_[idx % opening_book_pgn_.size()];
-    } else if (tournament_options_.opening.format == FormatType::EPD) {
-        Opening opening;
-
-        opening.fen = opening_book_epd_[idx % opening_book_epd_.size()];
-
-        return opening;
-    }
-
-    return {chess::constants::STARTPOS, {}};
+    finish({match_data}, match_data.reason);
 }
 
 }  // namespace fast_chess
