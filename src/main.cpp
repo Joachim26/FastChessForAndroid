@@ -2,26 +2,26 @@
 
 #include <cli.hpp>
 #include <matchmaking/tournament.hpp>
-#include <process/process_list.hpp>
-
-namespace fast_chess::atomic {
-std::atomic_bool stop = false;
-}  // namespace fast_chess::atomic
+#include <util/thread_vector.hpp>
 
 namespace fast_chess {
 
+namespace atomic {
+std::atomic_bool stop = false;
+}
+
 #ifdef _WIN64
 #include <windows.h>
-ProcessList<HANDLE> pid_list;
+ThreadVector<HANDLE> process_list;
 #else
 #include <unistd.h>
-ProcessList<pid_t> pid_list;
+ThreadVector<pid_t> process_list;
 #endif
 }  // namespace fast_chess
 
 using namespace fast_chess;
 
-void clear_processes();
+void stopProcesses();
 void setCtrlCHandler();
 
 int main(int argc, char const *argv[]) {
@@ -40,22 +40,24 @@ int main(int argc, char const *argv[]) {
         Logger::log<Logger::Level::TRACE>("Starting tournament...");
         tour.start();
 
-        Logger::log("Finished tournament");
+        Logger::log<Logger::Level::INFO>("Finished tournament.");
     }
 
-    clear_processes();
+    stopProcesses();
 
     return 0;
 }
 
-void clear_processes() {
+/// @brief Make sure that all processes are stopped, and no zombie processes are left after the
+/// program exits.
+void stopProcesses() {
 #ifdef _WIN64
-    for (const auto &pid : pid_list) {
+    for (const auto &pid : process_list) {
         TerminateProcess(pid, 1);
         CloseHandle(pid);
     }
 #else
-    for (const auto &pid : pid_list) {
+    for (const auto &pid : process_list) {
         kill(pid, SIGINT);
         kill(pid, SIGKILL);
     }
