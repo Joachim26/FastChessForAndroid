@@ -5,21 +5,23 @@
 #include <utility>
 #include <vector>
 
-#include <types/player_info.hpp>
-#include <util/logger.hpp>
+#include <chess.hpp>
+
+#include <util/date.hpp>
 
 namespace fast_chess {
 
 struct MoveData {
     MoveData(std::string _move, std::string _score_string, int64_t _elapsed_millis, int _depth,
-             int _seldepth, int _score, int _nodes)
+             int _seldepth, int _score, int _nodes, bool _legal = true)
         : move(std::move(_move)),
           score_string(std::move(_score_string)),
           elapsed_millis(_elapsed_millis),
           nodes(_nodes),
           seldepth(_seldepth),
           depth(_depth),
-          score(_score) {}
+          score(_score),
+          legal(_legal) {}
 
     std::string move;
     std::string score_string;
@@ -29,6 +31,7 @@ struct MoveData {
     int depth              = 0;
     int score              = 0;
     int nps                = 0;
+    bool legal             = true;
 };
 
 enum class MatchTermination {
@@ -41,11 +44,17 @@ enum class MatchTermination {
 };
 
 struct MatchData {
-    MatchData() = default;
+    struct PlayerInfo {
+        EngineConfiguration config;
+        chess::GameResult result = chess::GameResult::NONE;
+        chess::Color color       = chess::Color::NONE;
+    };
+
+    MatchData() {}
 
     explicit MatchData(std::string fen) : fen(std::move(fen)) {
-        start_time = Logger::getDateTime("%Y-%m-%dT%H:%M:%S %z");
-        date       = Logger::getDateTime("%Y-%m-%d");
+        start_time = time::datetime("%Y-%m-%dT%H:%M:%S %z");
+        date       = time::datetime("%Y-%m-%d");
     }
 
     std::pair<PlayerInfo, PlayerInfo> players;

@@ -1,9 +1,11 @@
 #include <engines/uci_engine.hpp>
 
 #include <stdexcept>
+#include <string>
+#include <vector>
 
-#include <helper.hpp>
-#include <util/logger.hpp>
+#include <util/helper.hpp>
+#include <util/logger/logger.hpp>
 
 namespace fast_chess {
 

@@ -1,44 +1,52 @@
-CXX      := g++
-CXXFLAGS := -O3 -std=c++17 -Wall -Wextra
-INCLUDES := -Isrc -Ithird_party
-NATIVE 	 := -march=native
+#Compiler
+CXX              := g++
 
-DEPFLAGS := -MMD -MP
-TMPDIR   := tmp
+TARGET           := fast-chess
 
-SRC_FILES := $(wildcard src/*.cpp) $(wildcard src/*/*.cpp) $(wildcard src/*/*/*.cpp)
-TEST_SRC  := $(wildcard tests/*.cpp)
+# Source, Includes
+SRCDIR           := src
+TESTDIR          := tests
+BUILDDIR         := tmp
+INCDIR           := src
+
+#Flags, Libraries and Includes
+CXXFLAGS         := -O3 -std=c++17 -Wall -Wextra -DNDEBUG
+CXXFLAGS_TEST	 := -O2 -std=c++17 -Wall -Wextra -pedantic -Wuninitialized -g3 -fno-omit-frame-pointer
+INC              := -I$(INCDIR) -Ithird_party
+
+SRC_FILES        := $(shell find $(SRCDIR) -name "*.cpp")
+SRC_FILES_TEST   := $(shell find $(TESTDIR) -maxdepth 1 -name "*.cpp")
+HEADERS          := $(shell find $(SRCDIR) -name "*.hpp") $(shell find $(TESTDIR) -maxdepth 1 -name "*.hpp")
+
+# Windows file extension
+SUFFIX           := .exe
+
+NATIVE 	         := -march=native
+
+ifeq ($(MAKECMDGOALS),$(TESTDIR))
+	CXXFLAGS  := $(CXXFLAGS_TEST)
+	SRC_FILES := $(filter-out src/main.cpp, $(SRC_FILES)) $(SRC_FILES_TEST)
+	TARGET    := $(TARGET)-tests
+	NATIVE    := 
+endif
+
+OBJECTS   := $(patsubst %.cpp,$(BUILDDIR)/%.o,$(SRC_FILES))
+DEPENDS   := $(patsubst %.cpp,$(BUILDDIR)/%.d,$(SRC_FILES))
+DEPFLAGS  := -MMD -MP
+MKDIR	  := mkdir -p
 
 ifeq ($(OS), Windows_NT)
-	MKDIR    := mkdir
 	uname_S  := Windows
-	SUFFIX   := .exe
 	LDFLAGS  := -static -static-libgcc -static-libstdc++ -Wl,--no-as-needed
 else
 ifeq ($(COMP), MINGW)
-	MKDIR    := mkdir
 	uname_S  := Windows
-	SUFFIX   := .exe
 else
-	MKDIR   := mkdir -p
+	SUFFIX  :=
 	LDFLAGS := -pthread
 	uname_S := $(shell uname -s)
-	SUFFIX  :=
 endif
 endif
-
-ifeq ($(MAKECMDGOALS),tests)
-	CXXFLAGS  := -O2 -std=c++17 -Wall -Wextra -pedantic -Wuninitialized -g3 -fno-omit-frame-pointer
-	SRC_FILES := $(filter-out src/main.cpp, $(SRC_FILES)) $(TEST_SRC)
-	TARGET    := fast-chess-tests
-	NATIVE    := 
-else
-	CXXFLAGS  += -DNDEBUG
-	TARGET    := fast-chess
-endif
-
-OBJECTS   := $(patsubst %.cpp,$(TMPDIR)/%.o,$(SRC_FILES))
-DEPENDS   := $(patsubst %.cpp,$(TMPDIR)/%.d,$(SRC_FILES))
 
 ifeq ($(build), debug)
 	CXXFLAGS := -O2 -std=c++17 -Wall -Wextra -pedantic -Wuninitialized -g3
@@ -55,18 +63,22 @@ ifeq ($(uname_S), Darwin)
 	LDFLAGS =
 endif
 
+# Compile with address sanitizer
 ifeq ($(san), asan)
 	LDFLAGS += -fsanitize=address
 endif
 
+# Compile with memory sanitizer
 ifeq ($(san), memory)
 	LDFLAGS += -fsanitize=memory -fPIE -pie
 endif
 
+# Compile with undefined behavior sanitizer
 ifeq ($(san), undefined)
 	LDFLAGS += -fsanitize=undefined
 endif
 
+# Compile with thread sanitizer
 ifeq ($(san), thread)
 	LDFLAGS += -fsanitize=thread
 endif
@@ -77,7 +89,6 @@ ifneq ($(GIT_SHA), )
 	CXXFLAGS += -DGIT_SHA=\"$(GIT_SHA)\"
 endif
 
-# Versioning
 GIT_DATE = $(shell git show -s --date=format:'%Y%m%d' --format=%cd HEAD 2>/dev/null)
 ifneq ($(GIT_DATE), )
 	CXXFLAGS += -DGIT_DATE=\"$(GIT_DATE)\"
@@ -95,19 +106,25 @@ all: $(TARGET)
 tests: $(TARGET)
 	$(CXX) $(CXXFLAGS) ./tests/mock/engine/dummy_engine.cpp -o ./tests/mock/engine/dummy_engine$(SUFFIX) $(LDFLAGS)
 
+format: $(SRC_FILES) $(HEADERS)
+	clang-format -i $^
+
 $(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $(NATIVE) $(INCLUDES) -MMD -MP -o $@ $^ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(NATIVE) $(INC) $(DEPFLAGS) -o $@ $^ $(LDFLAGS)
 
-$(TMPDIR)/%.o: %.cpp | $(TMPDIR)
-	$(CXX) $(CXXFLAGS) $(NATIVE) $(INCLUDES) -MMD -MP -c $< -o $@ $(LDFLAGS)
+$(BUILDDIR)/%.o: %.cpp | build_directories
+	$(CXX) $(CXXFLAGS) $(NATIVE) $(INC) $(DEPFLAGS) -c $< -o $@ $(LDFLAGS)
 
-$(TMPDIR):
-	$(MKDIR) "$(TMPDIR)" "$(TMPDIR)/src" "$(TMPDIR)/src/engines" "$(TMPDIR)/src/matchmaking" "$(TMPDIR)/src/util" "$(TMPDIR)/tests"
+build_directories:
+	@$(MKDIR) $(BUILDDIR)
+	@find src -type d -exec $(MKDIR) $(BUILDDIR)/{} \;
+	@find tests -type d -exec $(MKDIR) $(BUILDDIR)/{} \;
 
 clean:
-	rm -rf $(TMPDIR) $(TARGET) *.exe
+	rm -rf $(BUILDDIR) $(TARGET) $(TARGET).exe
 
 -include $(DEPENDS)
 
+# Force rebuild of options.o for accurate versioning
 tmp/src/options.o: FORCE
 FORCE:

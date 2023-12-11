@@ -2,16 +2,14 @@
 
 #include <string>
 
-#include <cli.hpp>
-#include <sprt.hpp>
+#include <cli/cli.hpp>
+#include <matchmaking/sprt/sprt.hpp>
 #include <types/engine_config.hpp>
 #include <types/enums.hpp>
 #include <types/match_data.hpp>
 #include <types/stats.hpp>
 
 namespace fast_chess {
-
-class Tournament;  // forward declaration
 
 using pair_config = std::pair<fast_chess::EngineConfiguration, fast_chess::EngineConfiguration>;
 

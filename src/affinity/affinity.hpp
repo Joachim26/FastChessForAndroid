@@ -5,7 +5,6 @@
 #elif defined(__APPLE__)
 #include <mach/thread_act.h>
 #include <mach/thread_policy.h>
-#include <mach/thread_act.h>
 #include <pthread.h>
 #else
 #include <sched.h>
@@ -14,7 +13,6 @@
 namespace affinity {
 
 #ifdef _WIN64
-#include <windows.h>
 
 inline bool setAffinity(const std::vector<int>& cpus, HANDLE process_handle) noexcept {
     DWORD_PTR affinity_mask = 0;
@@ -53,5 +51,6 @@ inline bool setAffinity(const std::vector<int>& cpus, pid_t process_pid) noexcep
 
     return sched_setaffinity(process_pid, sizeof(cpu_set_t), &mask);
 }
+
 #endif
 }  // namespace affinity
