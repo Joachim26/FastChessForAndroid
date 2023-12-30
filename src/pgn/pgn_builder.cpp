@@ -67,6 +67,9 @@ PgnBuilder::PgnBuilder(const MatchData &match, const options::Tournament &tourna
         pgn_ << (line_length == 0 ? "" : " ") << move_str;
         line_length += move_str.size();
     }
+
+    // 8.2.6: Game Termination Markers
+    pgn_ << " " << getResultFromMatch(match_);
 }
 
 template <typename T>
@@ -98,12 +101,12 @@ std::string PgnBuilder::addMove(chess::Board &board, const MoveData &move, std::
     ss << (illegal ? move.move : moveNotation(board, move.move));
 
     ss << addComment(
-        (move.score_string + "/" + std::to_string(move.depth)),                                //
-        formatTime(move.elapsed_millis),                                                       //
-        game_options_.pgn.track_nodes ? "nodes," + std::to_string(move.nodes) : "",            //
-        game_options_.pgn.track_seldepth ? "seldepth, " + std::to_string(move.seldepth) : "",  //
-        game_options_.pgn.track_nps ? "nps, " + std::to_string(move.nps) : "",                 //
-        match_.moves.size() == move_number ? match_.reason : ""                                //
+        (move.score_string + "/" + std::to_string(move.depth)),                         //
+        formatTime(move.elapsed_millis),                                                //
+        game_options_.pgn.track_nodes ? "n=" + std::to_string(move.nodes) : "",         //
+        game_options_.pgn.track_seldepth ? "sd=" + std::to_string(move.seldepth) : "",  //
+        game_options_.pgn.track_nps ? "nps=" + std::to_string(move.nps) : "",           //
+        match_.moves.size() == move_number ? match_.reason : ""                         //
     );
 
     return ss.str();

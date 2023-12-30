@@ -45,6 +45,8 @@ Prefer a pre-compiled version?
 
 Download the latest release from our [release page](https://github.com/Disservin/fast-chess/releases).
 
+Current dev versions are available as artifacts from the [CI](https://github.com/Disservin/fast-chess/actions?query=is%3Asuccess+event%3Apush+branch%3Amaster).
+
 ### Example usage
 
 Here's an example of how to use fast-chess:
@@ -61,7 +63,7 @@ opposite effect. Also it is highly encouraged to use an opening book._
 
 ## Command line options
 
-See [man](man.md) for a detailed description of all command line options.
+See [man](man) for a detailed description of all command line options.
 
 ## Contributing
 
