@@ -1,11 +1,8 @@
 name: FastChess
 
 on:
-  push:
-    branches: ["master"]
-  pull_request:
-    branches: ["master"]
-
+  workflow_dispatch:
+  
 jobs:
   Artifacts:
     if: github.ref == 'refs/heads/master'
