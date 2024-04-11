@@ -188,10 +188,18 @@ bool Match::playMove(Player& us, Player& opponent) {
 
         Logger::log<Logger::Level::WARN>("Warning; Engine", name, "loses on time");
 
+        // we send a stop command to the engine to prevent it from thinking
+        // and wait for a bestmove to appear
+
+        us.engine.writeEngine("stop");
+
+        // wait for bestmove, indefinitely
+        us.engine.readEngine("bestmove", 0ms);
+
         return false;
     }
 
-    draw_tracker_.update(us.engine.lastScore(), data_.moves.size(), us.engine.lastScoreType());
+    draw_tracker_.update(us.engine.lastScore(), data_.moves.size() / 2, us.engine.lastScoreType());
     resign_tracker_.update(us.engine.lastScore(), us.engine.lastScoreType());
 
     const auto best_move = us.engine.bestmove();
@@ -220,7 +228,7 @@ bool Match::isLegal(Move move) const noexcept {
     Movelist moves;
     movegen::legalmoves(moves, board_);
 
-    return moves.find(move) > -1;
+    return std::find(moves.begin(), moves.end(), move) != moves.end();
 }
 
 bool Match::isUciMove(const std::string& move) noexcept {
@@ -256,7 +264,7 @@ void Match::verifyPvLines(const Player& us) {
         std::for_each(it_start, it_end, [&](const auto& token) {
             movegen::legalmoves(moves, tmp);
 
-            if (moves.find(uci::uciToMove(tmp, token)) == -1) {
+            if (std::find(moves.begin(), moves.end(), uci::uciToMove(tmp, token)) == moves.end()) {
                 Logger::log<Logger::Level::WARN>("Warning; Illegal pv move ", token, "pv:", info);
             }
 

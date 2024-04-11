@@ -22,6 +22,7 @@ class UciEngine : Process {
     explicit UciEngine(const EngineConfiguration &config) {
         loadConfig(config);
         start();
+        output_.reserve(100);
     }
 
     ~UciEngine() override { quit(); }
@@ -45,6 +46,8 @@ class UciEngine : Process {
     /// @return
     Process::Status readEngine(std::string_view last_word,
                                std::chrono::milliseconds threshold = ping_time_);
+
+    [[nodiscard]] std::string lastInfoLine() const;
 
     /// @brief Writes the input to the engine. May throw if the write fails.
     /// @param input

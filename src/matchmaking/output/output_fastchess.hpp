@@ -22,18 +22,20 @@ class Fastchess : public IOutput {
         const Elo elo(stats.wins, stats.losses, stats.draws);
 
         std::stringstream ss;
-        ss << "Score of "         //
-           << first               //
-           << " vs "              //
-           << second              //
-           << ": "                //
-           << stats.wins          //
-           << " - "               //
-           << stats.losses        //
-           << " - "               //
-           << stats.draws         //
-           << " [] "              //
-           << current_game_count  //
+        ss << "Score of "                                                //
+           << first                                                      //
+           << " vs "                                                     //
+           << second                                                     //
+           << ": "                                                       //
+           << stats.wins                                                 //
+           << " - "                                                      //
+           << stats.losses                                               //
+           << " - "                                                      //
+           << stats.draws                                                //
+           << " ["                                                       //
+           << Elo::getScoreRatio(stats.wins, stats.losses, stats.draws)  //
+           << "] "                                                       //
+           << current_game_count                                         //
            << "\n";
 
         ss << "Elo difference: "                                        //
@@ -46,7 +48,7 @@ class Fastchess : public IOutput {
            << Elo::getDrawRatio(stats.wins, stats.losses, stats.draws)  //
            << "\n";
 
-        std::cout << ss.str();
+        std::cout << ss.str() << std::flush;
     }
 
     void printSprt(const SPRT& sprt, const Stats& stats) override {
@@ -56,7 +58,7 @@ class Fastchess : public IOutput {
             ss << "LLR: " << std::fixed << std::setprecision(2)
                << sprt.getLLR(stats.wins, stats.draws, stats.losses) << " " << sprt.getBounds()
                << " " << sprt.getElo() << "\n";
-            std::cout << ss.str();
+            std::cout << ss.str() << std::flush;
         }
     };
 
@@ -76,7 +78,7 @@ class Fastchess : public IOutput {
            << stats.penta_WL + stats.penta_DD << std::right << std::setw(7)  //
            << stats.penta_LD << std::right << std::setw(7)                   //
            << stats.penta_LL << "\n";
-        std::cout << ss.str();
+        std::cout << ss.str() << std::flush;
     }
 
     void startGame(const pair_config& configs, std::size_t current_game_count,
@@ -94,7 +96,7 @@ class Fastchess : public IOutput {
            << ")"                  //
            << "\n";
 
-        std::cout << ss.str();
+        std::cout << ss.str() << std::flush;
     }
 
     void endGame(const pair_config& configs, const Stats& stats, const std::string& annotation,
@@ -114,7 +116,7 @@ class Fastchess : public IOutput {
            << "}"                  //
            << "\n";
 
-        std::cout << ss.str();
+        std::cout << ss.str() << std::flush;
     }
 
     void endTournament() override { std::cout << "Tournament finished" << std::endl; }

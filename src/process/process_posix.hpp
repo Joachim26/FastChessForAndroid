@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -21,6 +22,7 @@
 #include <sys/types.h>  // pid_t
 #include <sys/wait.h>
 #include <unistd.h>  // _exit, fork
+#include <wordexp.h>
 
 #include <affinity/affinity.hpp>
 #include <util/logger/logger.hpp>
@@ -30,9 +32,18 @@ namespace fast_chess {
 extern ThreadVector<pid_t> process_list;
 }  // namespace fast_chess
 
+struct ArgvDeleter {
+    void operator()(char **argv) {
+        for (int i = 0; argv[i] != nullptr; ++i) {
+            delete[] argv[i];  // delete each string
+        }
+        delete[] argv;  // delete the array of pointers
+    }
+};
+
 class Process : public IProcess {
    public:
-    ~Process() override { killProcess(); }
+    virtual ~Process() override { killProcess(); }
 
     void init(const std::string &command, const std::string &args,
               const std::string &log_name) override {
@@ -76,21 +87,30 @@ class Process : public IProcess {
 
             if (close(in_pipe_[1]) == -1) throw std::runtime_error("Failed to close inpipe");
 
-            constexpr auto rtrim = [](std::string &s) {
-                s.erase(std::find_if(s.rbegin(), s.rend(),
-                                     [](unsigned char ch) { return !std::isspace(ch); })
-                            .base(),
-                        s.end());
-            };
+            wordexp_t p;
+            p.we_offs = 0;
 
-            auto full_command = command + " " + args;
+            switch (wordexp(args.c_str(), &p, 0)) {
+                case WRDE_NOSPACE:
+                    wordfree(&p);
+                    break;
+            }
 
-            // remove trailing whitespaces
-            rtrim(full_command);
+            unique_argv_ = std::unique_ptr<char *[], ArgvDeleter>(
+                new char *[p.we_wordc + 2]);  // +2 for the command and the nullptr
+
+            unique_argv_.get()[0] = strdup(command.c_str());
+
+            for (size_t i = 0; i < p.we_wordc; i++) {
+                unique_argv_.get()[i + 1] = strdup(p.we_wordv[i]);
+            }
+
+            unique_argv_.get()[p.we_wordc + 1] = nullptr;
 
             // Execute the engine
-            if (execl(command.c_str(), full_command.c_str(), (char *)NULL) == -1)
+            if (execv(command.c_str(), unique_argv_.get()) == -1) {
                 throw std::runtime_error("Failed to execute engine");
+            }
 
             _exit(0); /* Note that we do not use exit() */
         }
@@ -164,7 +184,6 @@ class Process : public IProcess {
         fcntl(in_pipe_[0], F_SETFL, fcntl(in_pipe_[0], F_GETFL) | O_NONBLOCK);
 
         lines.clear();
-        lines.reserve(30);
 
         std::string currentLine;
         currentLine.reserve(300);
@@ -252,6 +271,9 @@ class Process : public IProcess {
 
     pid_t process_pid_;
     int in_pipe_[2], out_pipe_[2];
+
+    // exec
+    std::unique_ptr<char *[], ArgvDeleter> unique_argv_;
 };
 
 #endif
